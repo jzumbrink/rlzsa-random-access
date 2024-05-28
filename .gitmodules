@@ -1,0 +1,12 @@
+[submodule "external/sais-lite-lcp"]
+	path = external/sais-lite-lcp
+	url = git@github.com:kurpicz/sais-lite-lcp.git
+[submodule "external/ips4o"]
+	path = external/ips4o
+	url = git@github.com:ips4o/ips4o.git
+[submodule "external/sdsl-lite"]
+	path = external/sdsl-lite
+	url = git@github.com:simongog/sdsl-lite.git
+[submodule "external/unordered_dense"]
+	path = external/unordered_dense
+	url = git@github.com:martinus/unordered_dense.git
