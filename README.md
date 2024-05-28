@@ -2,6 +2,7 @@ r-index: the run-length BWT index
 ===============
 Author: Nicola Prezza (nicola.prezza@gmail.com)
 Joint work with Travis Gagie and Gonzalo Navarro
+RLZSA support has been added by Lukas Nalbach
 
 cite as:
 
@@ -11,17 +12,15 @@ Travis Gagie, Gonzalo Navarro, and Nicola Prezza. Fully Functional Suffix Trees 
 
 ### Brief description
 
-The r-index is the first full-text index of size O(r), r being the number of BWT runs of the input text (of size n), supporting fast (almost optimal) locate of pattern occurrences. The r-index employs a novel suffix array sampling of size 2r; in classical FM-indexes, this sampling would result in a locate time of Omega(n/r) per occurrence. The r-index, on the other hand, reduces this time to O(log(n/r)).
+The r-index is the first full-text index of size O(r+z'), r being the number of BWT runs of the input text (of size n) and z' is the number of phrases in the relative lempel-ziv encoded differential suffix array (see [1]).
 
 Let s be the alphabet size and fix a constant eps>0. The r-index offers the following tradeoffs:
 
-- Space: r * ( log s + (1+eps)log(n/r) + 2log n ) bits
+- Space: r * ( log s + (1+eps)log(n/r) + 2log n ) + O(r log n) + O(z' log n) bits
 - Count time: O( (m/eps) * (log (n/r) + log s) )
-- Locate time: After count, O( log(n/r) ) time per occurrence 
+- Locate time: After count, O( 1 ) time per occurrence, but O( r ) time overall (worst-case)
 
 On very repetitive datasets, the r-index locates orders of magnitude faster than the RLCSA (with a sampling rate resulting in the same size for the two indexes).
-
-NEWS: refactored locate strategy. Let (l,r) be the SA range. Now, the index first finds SA[r] and then applies function Phi to locate SA[r-1], SA[r-2], ..., SA[l]. This is both faster and more space efficient than the strategy originally implemented and described in the paper.
 
 ### Download
 
@@ -70,3 +69,6 @@ Be aware that the above executables are just benchmarking tools: no output is ge
 ### Funding
 
 Nicola Prezza has been supported by the project Italian MIUR-SIR CMACBioSeq ("Combinatorial methods for analysis and compression of biological sequences") grant n.~RBSI146R5L, PI: Giovanna Rosone. Link: http://pages.di.unipi.it/rosone/CMACBioSeq.html
+
+### References
+[1] Simon J. Puglisi and Bella Zhukova. Smaller RLZ-Compressed Suffix Arrays. In 31st Data Compression Conference (DCC), 2021
