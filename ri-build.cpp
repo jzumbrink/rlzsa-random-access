@@ -8,7 +8,7 @@
 #include "utils.hpp"
 #include "internal/r_index.hpp"
 
-using namespace ri;
+using namespace ri_rlzsa;
 using namespace std;
 
 string out_basename=string();

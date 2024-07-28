@@ -11,15 +11,14 @@
  *  Huffman-compressed string with access/rank/select. The class is a wrapper on sdsl::wt_huff, with a simpler constructor
  */
 
-#ifndef HUFF_STRING_HPP_
-#define HUFF_STRING_HPP_
+#pragma once
 
 #include <sdsl/wavelet_trees.hpp>
 
 using namespace sdsl;
 using namespace std;
 
-namespace ri{
+namespace ri_rlzsa{
 
 class huff_string{
 
@@ -94,5 +93,3 @@ private:
 };
 
 }
-
-#endif /* HUFF_STRING_HPP_ */

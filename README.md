@@ -2,7 +2,9 @@ r-index: the run-length BWT index
 ===============
 Author: Nicola Prezza (nicola.prezza@gmail.com)
 Joint work with Travis Gagie and Gonzalo Navarro
-RLZSA support has been added by Lukas Nalbach
+
+rlzsa has been added according to [1] and [2]
+
 
 cite as:
 
@@ -26,11 +28,9 @@ On very repetitive datasets, the r-index locates orders of magnitude faster than
 
 To clone the repository, run:
 
-> git clone http://github.com/nicolaprezza/r-index
+> git clone https://github.com/LukasNalbach/r-index-rlzsa
 
 ### Compile
-
-The library has been tested under linux using gcc 6.2.0. You need the SDSL library installed on your system (https://github.com/simongog/sdsl-lite).
 
 We use cmake to generate the Makefile. Create a build folder in the main r-index folder:
 
@@ -71,4 +71,6 @@ Be aware that the above executables are just benchmarking tools: no output is ge
 Nicola Prezza has been supported by the project Italian MIUR-SIR CMACBioSeq ("Combinatorial methods for analysis and compression of biological sequences") grant n.~RBSI146R5L, PI: Giovanna Rosone. Link: http://pages.di.unipi.it/rosone/CMACBioSeq.html
 
 ### References
-[1] Simon J. Puglisi and Bella Zhukova. Smaller RLZ-Compressed Suffix Arrays. In 31st Data Compression Conference (DCC), 2021
+[1] Simon J. Puglisi and Bella Zhukova. Smaller RLZ-Compressed Suffix Arrays. In 31st Data Compression Conference (DCC), 2021 ([pdf](https://ieeexplore.ieee.org/document/9418726))
+
+[2] Bella Zhukova, New space-time trade-offs for pattern matching with compressed indexes, PhD Thesis 2024 ([pdf](https://helda.helsinki.fi/items/a672a30c-0611-408c-abeb-36aa069df2a1))

@@ -10,3 +10,6 @@
 [submodule "external/unordered_dense"]
 	path = external/unordered_dense
 	url = git@github.com:martinus/unordered_dense.git
+[submodule "external/malloc_count"]
+	path = external/malloc_count
+	url = git@github.com:ByteHamster-etc/malloc_count.git

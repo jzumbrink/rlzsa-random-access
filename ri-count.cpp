@@ -8,7 +8,7 @@
 
 #include "internal/utils.hpp"
 
-using namespace ri;
+using namespace ri_rlzsa;
 using namespace std;
 
 string check = string();//check occurrences on this text

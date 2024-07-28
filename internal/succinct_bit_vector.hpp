@@ -7,8 +7,7 @@
   */
 
 
-#ifndef INTERNAL_SUCCINCT_BIT_VECTOR_HPP_
-#define INTERNAL_SUCCINCT_BIT_VECTOR_HPP_
+#pragma once
 
 #include <vector>
 
@@ -23,7 +22,7 @@ typedef uint64_t ulint;
 typedef uint32_t uint;
 #endif
 
-namespace ri{
+namespace ri_rlzsa{
 
 class succinct_bit_vector{
 
@@ -144,6 +143,3 @@ private:
 };
 
 }
-
-
-#endif /* INTERNAL_SUCCINCT_BIT_VECTOR_HPP_ */

@@ -12,11 +12,10 @@
  *
  */
 
-#ifndef R_INDEX_S_H_
-#define R_INDEX_S_H_
+#pragma once
 
-#include <definitions.hpp>
-#include <rle_string.hpp>
+#include "definitions.hpp"
+#include "rle_string.hpp"
 #include "sparse_sd_vector.hpp"
 #include "sparse_hyb_vector.hpp"
 #include "utils.hpp"
@@ -29,7 +28,7 @@
 
 using namespace sdsl;
 
-namespace ri{
+namespace ri_rlzsa{
 
 template	<	class sparse_bv_type = sparse_sd_vector,
 				class rle_string_t = rle_string_sd
@@ -51,12 +50,33 @@ public:
 		auto time = now();
 
 		this->sais = sais;
+		
+		std::vector<uint8_t> occurs(256,0);
+		uint8_t sigma = 0;
 
-		if(contains_reserved_chars(input)){
+		for (uint64_t i=0; i<input.size(); i++) {
+			if (occurs[char_to_uchar(input[i])] == 0) {
+				occurs[char_to_uchar(input[i])] = 1;
+				sigma++;
+			}
+		}
 
-			if (log) cout << "Error: input string contains one of the reserved characters 0x0, 0x1" << endl;
-			exit(1);
+		if (occurs[0] || occurs[1]) {
+			chars_remapped = true;
 
+			M_Sigma.resize(256,0);
+			uint8_t cur_char = 2;
+
+			for (uint64_t i=0; i<256; i++) {
+				if (occurs[i]) {
+					M_Sigma[i] = cur_char;
+					cur_char++;
+				}
+			}
+
+			for (uint64_t i=0; i<input.size(); i++) {
+				input[i] = uchar_to_char(M_Sigma[char_to_uchar(input[i])]);
+			}
 		}
 
 		if (log) cout << "n = " << input.size() << endl;
@@ -183,32 +203,32 @@ public:
 		if (log) time = log_runtime(time);
 		if (log) cout << "building suffix array of SA^d" << flush;
 
-		vector<int32_t> SA_sad;
+		vector<int64_t> SA_sad;
 		SA_sad.resize(bwt.size()+1);
 		
 		if (bytes_sad == 1) {
 			saisxx(
 				reinterpret_cast<uint8_t*>(SA_d_vec.data()),
 				SA_sad.begin(),
-				(int32_t)bwt.size(),(int32_t)alphabet.size()+1
+				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
 			);
 		} else if (bytes_sad == 2) {
 			saisxx(
 				reinterpret_cast<uint16_t*>(SA_d_vec.data()),
 				SA_sad.begin(),
-				(int32_t)bwt.size(),(int32_t)alphabet.size()+1
+				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
 			);
 		} else if (bytes_sad == 4) {
 			saisxx(
 				reinterpret_cast<uint32_t*>(SA_d_vec.data()),
 				SA_sad.begin(),
-				(int32_t)bwt.size(),(int32_t)alphabet.size()+1
+				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
 			);
 		} else {
 			saisxx(
 				reinterpret_cast<uint64_t*>(SA_d_vec.data()),
 				SA_sad.begin(),
-				(int32_t)bwt.size(),(int32_t)alphabet.size()+1
+				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
 			);
 		}
 
@@ -216,7 +236,7 @@ public:
 		if (log) cout << "building inverse suffix array of SA^d" << flush;
 
 		int_vector<> ISA_sad;
-		ISA_sad.width(SA_d_vec.width());
+		ISA_sad.width(ceil(log2(bwt.size()+1)/8.0)*8);
 		ISA_sad.resize(bwt.size()+1);
 
 		for (ulint i=0; i<=bwt.size(); i++) {
@@ -227,7 +247,7 @@ public:
 		if (log) cout << "counting frequencies of k-mers in SA^d" << flush;
 
 		ulint size_R_target = std::min(std::max<ulint>(1,bwt.size()/3),5*r); // 3'000'000/(SA_d_vec.width()/8)
-		ulint segment_size = std::min<ulint>(4069,size_R_target);
+		ulint segment_size = std::min<ulint>(4096,size_R_target);
 		ulint num_segments = bwt.size()/segment_size;
 		vector<ulint> selected_segments;
 		ulint k = std::min<ulint>(8,size_R_target);
@@ -236,8 +256,8 @@ public:
 		int_vector<> group;
 		int_vector<> freq;
 		
-		group.width(SA_d_vec.width());
-		freq.width(SA_d_vec.width());
+		group.width(ceil(log2(bwt.size()+1)/8.0)*8);
+		freq.width(ceil(log2(bwt.size()+1)/8.0)*8);
 
 		group.resize(bwt.size()+1);
 		freq.resize(bwt.size()+1);
@@ -289,13 +309,13 @@ public:
 
 			for (ulint s=0; s<num_segments; s++) {
 				sdsl::bit_vector is_group_processed;
-				is_group_processed.resize(num_groups);
+				is_group_processed.resize(num_groups+1);
 
 				for (ulint i=s*segment_size; i<(s+1)*segment_size-k; i++) {
 					ulint p = ISA_sad[i];
 
 					if (is_group_processed[group[p]] == 0) {
-						segment_freqs[s] += std::sqrt((ulint)freq[p]);
+						segment_freqs[s] += std::sqrt((double)freq[p]);
 						is_group_processed[group[p]] = 1;
 					}
 				}
@@ -308,7 +328,7 @@ public:
 			sdsl::bit_vector is_segment_selected;
 			is_segment_selected.resize(num_segments+1);
 			sdsl::bit_vector is_group_processed;
-			is_group_processed.resize(num_groups);
+			is_group_processed.resize(num_groups+1);
 
 			for (ulint s=0; s<num_segments_to_select; s++) {
 				ulint best_segment = 0;
@@ -328,7 +348,7 @@ public:
 
 					if (p <= bwt.size() && is_group_processed[group[p]] == 0) {
 						ulint g = group[p];
-						ulint freq_sqrt = std::sqrt((ulint)freq[p]);
+						double freq_sqrt = std::sqrt((double)freq[p]);
 
 						while (p > 0 && group[p-1] == g) {
 							p--;
@@ -376,6 +396,21 @@ public:
 			}
 		}
 
+		selected_segments.clear();
+		selected_segments.shrink_to_fit();
+
+		selected_segments.clear();
+		selected_segments.shrink_to_fit();
+
+		group.resize(0);
+
+		freq.resize(0);
+
+		SA_sad.clear();
+		SA_sad.shrink_to_fit();
+
+		ISA_sad.resize(0);
+
 		if (log) time = log_runtime(time);
 		if (log) cout << "building FM-Index for R" << flush;
 
@@ -389,6 +424,7 @@ public:
 
 		sdsl::csa_bitcompressed<sdsl::int_alphabet<>> FM_rrev;
 		sdsl::construct_im(FM_rrev,R_rev,0);
+		R_rev.resize(0);
 
 		if (log) time = log_runtime(time);
 		if (log) cout << "building rlzsa" << flush;
@@ -487,6 +523,7 @@ public:
 			std::cout << "z: " << PL.size() << std::endl;
 			std::cout << "z_l/z: " << z_l/(double)PL.size() << std::endl;
 			std::cout << "z/r: " << PL.size()/(double)r << std::endl;
+			std::cout << "peak memory usage: " << format_size(malloc_count_peak()) << std::endl;
 		}
 
 		/*
@@ -640,7 +677,7 @@ public:
 		ulint m = P.size();
 
 		for(ulint i=0;i<m and range.second>=range.first;++i)
-			range = LF(range,P[m-i-1]);
+			range = LF(range,chars_remapped ? M_Sigma[char_to_uchar(P[m-i-1])] : char_to_uchar(P[m-i-1]));
 
 		return range;
 
@@ -670,9 +707,8 @@ public:
 	 * locate all occurrences of P and return them in an array
 	 * (space consuming if result is big).
 	 */
-	vector<ulint> locate_all(string& P){
-
-		vector<ulint> OCC;
+	template<typename uint_t = ulint>
+	void locate_all(string& P, vector<uint_t>& OCC){
 
 		range_t res = count_and_get_occ(P);
 		
@@ -770,9 +806,13 @@ public:
 			s_cp = s_np;
 			s_np += std::max<ulint>(1,PL[x_p]);
 		}
+	}
 
+	template<typename uint_t = ulint>
+	vector<uint_t> locate_all(string& P){
+		vector<uint_t> OCC;
+		locate_all<uint_t>(P,OCC);
 		return OCC;
-
 	}
 
 
@@ -807,6 +847,12 @@ public:
 		assert(F.size()>0);
 		assert(bwt.size()>0);
 
+		out.write((char*)&chars_remapped,1);
+
+		if (chars_remapped) {
+			out.write((char*)&M_Sigma[0],256);
+		}
+
 		out.write((char*)&terminator_position,sizeof(terminator_position));
 		out.write((char*)F.data(),256*sizeof(ulint));
 
@@ -827,6 +873,13 @@ public:
 	 * \param in the istream
 	 */
 	void load(std::istream& in) {
+
+		in.read((char*)&chars_remapped,1);
+
+		if (chars_remapped) {
+			M_Sigma.resize(256);
+			in.read((char*)&M_Sigma[0],256);
+		}
 
 		in.read((char*)&terminator_position,sizeof(terminator_position));
 
@@ -935,7 +988,7 @@ private:
 
 		for(ulint i=0;i<m and range.second>=range.first;++i){
 
-			uchar c = P[m-i-1];
+			uchar c = chars_remapped ? M_Sigma[char_to_uchar(P[m-i-1])] : char_to_uchar(P[m-i-1]);
 
 			range1 = LF(range,c);
 
@@ -1013,6 +1066,8 @@ private:
 
 	bool sais = true;
 
+	bool chars_remapped = false;
+
 	/*
 	 * sparse RLBWT: r (log sigma + (1+epsilon) * log (n/r)) (1+o(1)) bits
 	 */
@@ -1028,8 +1083,7 @@ private:
 	sdsl::int_vector<> PS; // rlzsa phrase starting positions (every a-th phrase is sampled)
 	sdsl::int_vector<16> PL; // rlzsa phrase lengths
 	sdsl::int_vector<> S; // starting positions of the rlzsa phrases in R
+	std::vector<uint8_t> M_Sigma;
 };
 
 }
-
-#endif /* R_INDEX_S_H_ */

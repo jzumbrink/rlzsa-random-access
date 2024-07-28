@@ -7,7 +7,7 @@
 #include "internal/r_index.hpp"
 #include "internal/utils.hpp"
 
-using namespace ri;
+using namespace ri_rlzsa;
 using namespace std;
 
 bool hyb=false;

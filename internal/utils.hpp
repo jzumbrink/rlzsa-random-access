@@ -2,12 +2,15 @@
 // Use of this source code is governed
 // by a MIT license that can be found in the LICENSE file.
 
+#pragma once
+
 #include <sstream>
+
+#include <malloc_count.h>
 
 using namespace std;
 
-#ifndef UTILS_RI_HPP_
-#define UTILS_RI_HPP_
+namespace ri_rlzsa{
 
 using ulint = uint64_t;
 
@@ -38,6 +41,10 @@ string get_time(uint64_t time){
 
 	return ss.str();
 
+}
+
+inline uint8_t char_to_uchar(char c) {
+    return *reinterpret_cast<uint8_t*>(&c);
 }
 
 uint8_t bitsize(uint64_t x){
@@ -152,4 +159,4 @@ std::string format_size(uint64_t B) {
     return size_str;
 }
 
-#endif /* UTILS_RI_HPP_ */
+}

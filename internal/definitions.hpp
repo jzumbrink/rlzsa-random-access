@@ -9,8 +9,7 @@
  *      Author: nico
  */
 
-#ifndef INCLUDE_DEFINITIONS_HPP_
-#define INCLUDE_DEFINITIONS_HPP_
+#pragma once
 
 #include <string>
 #include <stdio.h>
@@ -34,7 +33,7 @@
 
 using namespace std;
 
-namespace ri{
+namespace ri_rlzsa{
 
 typedef uint64_t ulint;
 typedef long int lint;
@@ -49,5 +48,3 @@ typedef unsigned char uint8;
 typedef pair<ulint,ulint> range_t;
 
 }
-
-#endif /* INCLUDE_DEFINITIONS_HPP_ */

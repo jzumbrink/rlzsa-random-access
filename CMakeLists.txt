@@ -13,6 +13,12 @@ project (s-rlbwt)
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/internal)
 
+# malloc_count
+add_library(malloc_count INTERFACE)
+target_sources(malloc_count INTERFACE "${CMAKE_SOURCE_DIR}/external/malloc_count/malloc_count.c")
+target_include_directories(malloc_count INTERFACE "${CMAKE_SOURCE_DIR}/external/malloc_count/")
+target_link_libraries(malloc_count INTERFACE dl)
+
 # sdsl
 set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
 add_subdirectory("${CMAKE_SOURCE_DIR}/external/sdsl-lite/")
@@ -52,16 +58,19 @@ TARGET_LINK_LIBRARIES(ri-build divsufsort64)
 TARGET_LINK_LIBRARIES(ri-build ips4o)
 TARGET_LINK_LIBRARIES(ri-build unordered_dense)
 TARGET_LINK_LIBRARIES(ri-build sais-lite-lcp)
+TARGET_LINK_LIBRARIES(ri-build malloc_count)
 
 add_executable(ri-locate ri-locate.cpp)
 TARGET_LINK_LIBRARIES(ri-locate sdsl)
 TARGET_LINK_LIBRARIES(ri-locate divsufsort)
 TARGET_LINK_LIBRARIES(ri-locate divsufsort64)
+TARGET_LINK_LIBRARIES(ri-locate malloc_count)
 
 add_executable(ri-count ri-count.cpp)
 TARGET_LINK_LIBRARIES(ri-count sdsl)
 TARGET_LINK_LIBRARIES(ri-count divsufsort)
 TARGET_LINK_LIBRARIES(ri-count divsufsort64)
+TARGET_LINK_LIBRARIES(ri-count malloc_count)
 
 #add_executable(ri-space ri-space.cpp)
 #TARGET_LINK_LIBRARIES(ri-space sdsl)
@@ -78,6 +87,7 @@ TARGET_LINK_LIBRARIES(test sdsl)
 TARGET_LINK_LIBRARIES(test divsufsort)
 TARGET_LINK_LIBRARIES(test divsufsort64)
 TARGET_LINK_LIBRARIES(test gtest_main)
+TARGET_LINK_LIBRARIES(test malloc_count)
 
 set_target_properties(test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests/")
 

@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "internal/r_index.hpp"
 
+using namespace ri_rlzsa;
+
 TEST(test_move_r,fuzzy_test) {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -47,7 +49,7 @@ TEST(test_move_r,fuzzy_test) {
         }
 
         // build the index
-        ri::r_index<> index(input,true);
+        r_index<> index(input,true);
 
         // generate patterns from the input and test count- and locate queries
         std::uniform_int_distribution<uint32_t> pattern_pos_distrib(0,input_size-1);

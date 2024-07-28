@@ -9,8 +9,7 @@
 //============================================================================
 
 
-#ifndef INTERNAL_SPARSE_HYB_VECTOR_HPP_
-#define INTERNAL_SPARSE_HYB_VECTOR_HPP_
+#pragma once
 
 #include <vector>
 
@@ -25,7 +24,7 @@ typedef uint64_t ulint;
 typedef uint32_t uint;
 #endif
 
-namespace ri{
+namespace ri_rlzsa{
 
 class sparse_hyb_vector{
 
@@ -226,6 +225,3 @@ private:
 };
 
 }
-
-
-#endif /* INTERNAL_SPARSE_HYB_VECTOR_HPP_ */
