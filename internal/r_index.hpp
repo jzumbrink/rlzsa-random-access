@@ -25,6 +25,8 @@
 #include <ips4o.hpp>
 #include <sais.hxx>
 #include <ankerl/unordered_dense.h>
+#include <libsais.h>
+#include <libsais64.h>
 
 using namespace sdsl;
 
@@ -79,7 +81,8 @@ public:
 			}
 		}
 
-		if (log) cout << "n = " << input.size() << endl;
+		n = input.size() + 1;
+		if (log) cout << "n = " << n << endl;
 
 		if (log) cout << "building BWT and computing SA samples";
 		if(log && sais) cout << " (SE-SAIS)" << flush;
@@ -116,54 +119,62 @@ public:
 			if(bwt_s[i]==TERMINATOR)
 				terminator_position = i;
 
-		assert(input.size()+1 == bwt.size());
+		assert(input.size()+1 == n);
 		
 		if (log) time = log_runtime(time);
 
 		r = bwt.number_of_runs();
 
 		int log_r = bitsize(uint64_t(r));
-		int log_n = bitsize(uint64_t(bwt.size()));
+		int log_n = bitsize(uint64_t(n));
 
 		if (log) {
 			cout << "Number of BWT equal-letter runs: r = " << r << endl;
-			cout << "Rate n/r = " << double(bwt.size())/r << endl;
+			cout << "Rate n/r = " << double(n)/r << endl;
 			cout << "log2(r) = " << log2(double(r)) << endl;
-			cout << "log2(n/r) = " << log2(double(bwt.size())/r) << endl;
+			cout << "log2(n/r) = " << log2(double(n)/r) << endl;
 		}
 
+		if (n + 1 <= std::numeric_limits<int32_t>::max()) {
+			build_rlzsa_internal<int32_t>([&](ulint i){return SA[i];}, log);
+		} else {
+			build_rlzsa_internal<int64_t>([&](ulint i){return SA[i];}, log);
+		}
+
+	    sdsl::remove(cache_file_name(conf::KEY_SA, cc_sa));
+	}
+
+	protected:
+	template <typename sad_t>
+	void build_rlzsa_internal(std::function<ulint(ulint)> SA, bool log = false) {
+		auto time = now();
 		if (log) cout << "building SA^d" << flush;
 
-		int_vector<> SA_d_vec;
-		ulint bytes_sad;
-		double log2_n = log2(2*bwt.size()+1);
+		vector<sad_t> SA_d;
+		SA_d.reserve(n + 1);
+		SA_d.resize(n);
+		SA_d[0] = SA(0);
 
-		if (log2_n <= 8.0) {
-			bytes_sad = 1;
-		} else if (log2_n <= 16.0) {
-			bytes_sad = 2;
-		} else if (log2_n <= 32.0) {
-			bytes_sad = 4;
-		} else {
-			bytes_sad = 8;
-		}
-
-		SA_d_vec.width(bytes_sad*8);
-		SA_d_vec.resize(bwt.size()+1);
-		SA_d_vec[0] = SA[0];
-
-		for (ulint i=1; i<bwt.size(); i++) {
-			SA_d_vec[i] = (SA[i]+bwt.size())-SA[i-1];
+		for (ulint i=1; i<n; i++) {
+			SA_d[i] = (SA(i)+n)-SA(i-1);
 		}
 		
 		if (log) time = log_runtime(time);
+		build_rlzsa<sad_t>(SA_d, SA, log);
+	}
+
+	public:
+	template <typename sad_t = int32_t>
+	void build_rlzsa(vector<sad_t>& SA_d, std::function<ulint(ulint)> SA, bool log = false) {
+		n = SA_d.size();
+		auto time = now();
 		if (log) cout << "sorting SA^d" << flush;
 
 		vector<ulint> alphabet; // alphabet of SA^d
-		alphabet.resize(bwt.size());
+		alphabet.resize(n);
 
-		for (ulint i=0; i<bwt.size(); i++) {
-			alphabet[i] = SA_d_vec[i];
+		for (ulint i=0; i<n; i++) {
+			alphabet[i] = SA_d[i];
 		}
 
 		ips4o::sort(alphabet.begin(),alphabet.end()); // sort the values in SA^d
@@ -173,17 +184,18 @@ public:
 
 		auto it = std::unique(alphabet.begin(),alphabet.end()); // remove duplicates in SA^d
 		alphabet.resize(std::distance(alphabet.begin(),it));
+		ulint sigma_sad = alphabet.size();
 		ankerl::unordered_dense::map<ulint,ulint> alphabet_map; // map to the effective alphabet of SA^d
 		int_vector<> alphabet_map_inv; // map from the effective alphabet of SA^d
-		alphabet_map_inv.width(ceil(log2((2*bwt.size()+1))/8.0)*8);
-		alphabet_map_inv.resize(alphabet.size()+1);
+		alphabet_map_inv.width(ceil(log2((2*n))/8.0)*8);
+		alphabet_map_inv.resize(sigma_sad+1);
 		alphabet_map_inv[0] = 0;
 
 		{
 			ulint j = 1;
 
 			// build alphabet_map and alphabet_map_inv
-			for (ulint i=0; i<alphabet.size(); i++) {
+			for (ulint i=0; i<sigma_sad; i++) {
 				alphabet_map.insert({alphabet[i],j});
 				alphabet_map_inv[j] = alphabet[i];
 				j++;
@@ -194,61 +206,49 @@ public:
 		if (log) cout << "mapping SA^d to its effective alphabet" << flush;
 
 		// map SA^d to its effective alphabet
-		for (ulint i=0; i<bwt.size(); i++) {
-			SA_d_vec[i] = alphabet_map[SA_d_vec[i]];
+		for (ulint i=0; i<n; i++) {
+			SA_d[i] = alphabet_map[SA_d[i]];
 		}
 
-		SA_d_vec[bwt.size()] = 0;
 
 		if (log) time = log_runtime(time);
 		if (log) cout << "building suffix array of SA^d" << flush;
 
-		vector<int64_t> SA_sad;
-		SA_sad.resize(bwt.size()+1);
-		
-		if (bytes_sad == 1) {
-			saisxx(
-				reinterpret_cast<uint8_t*>(SA_d_vec.data()),
-				SA_sad.begin(),
-				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
-			);
-		} else if (bytes_sad == 2) {
-			saisxx(
-				reinterpret_cast<uint16_t*>(SA_d_vec.data()),
-				SA_sad.begin(),
-				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
-			);
-		} else if (bytes_sad == 4) {
-			saisxx(
-				reinterpret_cast<uint32_t*>(SA_d_vec.data()),
-				SA_sad.begin(),
-				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
-			);
-		} else {
-			saisxx(
-				reinterpret_cast<uint64_t*>(SA_d_vec.data()),
-				SA_sad.begin(),
-				(int64_t)bwt.size(),(int64_t)alphabet.size()+1
-			);
-		}
+		vector<sad_t> SA_sad;
+		SA_sad.resize(n);
 
+		if constexpr (std::is_same_v<sad_t, int32_t>) {
+			sad_t fs = std::min<sad_t>(6 * (sigma_sad + 1), n);
+			SA_d.resize(n + 1 + fs);
+			SA_d[n] = 0;
+			libsais_int(SA_d.data(), SA_sad.data(), n, sigma_sad + 1, fs);
+			SA_d.resize(n);
+		} else {
+			//sad_t fs = std::min<sad_t>(6 * (sigma_sad + 1), n);
+			//SA_d.resize(n + 1 + fs);
+			//SA_d[n] = 0;
+			//libsais64_long(SA_d.data(), SA_sad.data(), n, sigma_sad + 1, fs); // unfortunately still bugged
+			saisxx(SA_d.begin(), SA_sad.begin(), sad_t{n}, sad_t{sigma_sad + 1});
+			//SA_d.resize(n);
+		}
+		
 		if (log) time = log_runtime(time);
 		if (log) cout << "building inverse suffix array of SA^d" << flush;
 
 		int_vector<> ISA_sad;
-		ISA_sad.width(ceil(log2(bwt.size()+1)/8.0)*8);
-		ISA_sad.resize(bwt.size()+1);
+		ISA_sad.width(ceil(log2(n)/8.0)*8);
+		ISA_sad.resize(n);
 
-		for (ulint i=0; i<=bwt.size(); i++) {
+		for (ulint i=0; i<n; i++) {
 			ISA_sad[SA_sad[i]] = i;
 		}
 
 		if (log) time = log_runtime(time);
 		if (log) cout << "counting frequencies of k-mers in SA^d" << flush;
 
-		ulint size_R_target = std::min(std::max<ulint>(1,bwt.size()/3),5*r); // 3'000'000/(SA_d_vec.width()/8)
+		ulint size_R_target = std::min(std::max<ulint>(1,n/3),5*r); // 3'000'000/(SA_d.width()/8)
 		ulint segment_size = std::min<ulint>(4096,size_R_target);
-		ulint num_segments = bwt.size()/segment_size;
+		ulint num_segments = n/segment_size;
 		vector<ulint> selected_segments;
 		ulint k = std::min<ulint>(8,size_R_target);
 		ulint num_groups;
@@ -256,26 +256,26 @@ public:
 		int_vector<> group;
 		int_vector<> freq;
 		
-		group.width(ceil(log2(bwt.size()+1)/8.0)*8);
-		freq.width(ceil(log2(bwt.size()+1)/8.0)*8);
+		group.width(ceil(log2(n)/8.0)*8);
+		freq.width(ceil(log2(n)/8.0)*8);
 
-		group.resize(bwt.size()+1);
-		freq.resize(bwt.size()+1);
+		group.resize(n);
+		freq.resize(n);
 
 		{
 			ulint i = 1;
 			ulint g = 0;
 
-			while (i <= bwt.size()) {
+			while (i < n) {
 				ulint j = 1;
 				bool equal = true;
 
-				while (equal && i+j <= bwt.size()) {
+				while (equal && i+j < n) {
 					for (ulint l=0; l<k; l++) {
 						if (
-							SA_sad[i+j]+l > bwt.size() ||
-							SA_sad[i+j-1]+l > bwt.size() ||
-							SA_d_vec[SA_sad[i+j]+l] != SA_d_vec[SA_sad[i+j-1]+l]
+							SA_sad[i+j]+l > n ||
+							SA_sad[i+j-1]+l > n ||
+							SA_d[SA_sad[i+j]+l] != SA_d[SA_sad[i+j-1]+l]
 						) {
 							equal = false;
 							break;
@@ -346,7 +346,7 @@ public:
 				for (ulint i=best_segment*segment_size; i<(best_segment+1)*segment_size-k; i++) {
 					ulint p = ISA_sad[i];
 
-					if (p <= bwt.size() && is_group_processed[group[p]] == 0) {
+					if (p < n && is_group_processed[group[p]] == 0) {
 						ulint g = group[p];
 						double freq_sqrt = std::sqrt((double)freq[p]);
 
@@ -371,7 +371,7 @@ public:
 							}
 							
 							p++;
-						} while (p <= bwt.size() && group[p] == g);
+						} while (p < n && group[p] == g);
 
 						is_group_processed[g] = 1;
 					}
@@ -382,7 +382,7 @@ public:
 		}
 
 		{
-			R.width(ceil(log2((2*bwt.size()+1))/8.0)*8);
+			R.width(ceil(log2((2*n))/8.0)*8);
 			R.resize(segment_size*selected_segments.size());
 			ulint j = 0;
 
@@ -390,7 +390,7 @@ public:
 				ulint segment_start = selected_segments[i]*segment_size;
 
 				for (ulint l=0; l<segment_size; l++) {
-					R[j] = alphabet_map_inv[SA_d_vec[segment_start+l]];
+					R[j] = alphabet_map_inv[SA_d[segment_start+l]];
 					j++;
 				}
 			}
@@ -415,7 +415,7 @@ public:
 		if (log) cout << "building FM-Index for R" << flush;
 
 		int_vector<> R_rev;
-		R_rev.width(ceil(log2((2*bwt.size()+1))/8.0)*8);
+		R_rev.width(ceil(log2((2*n))/8.0)*8);
 		R_rev.resize(R.size());
 
 		for (ulint i=0; i<R.size(); i++) {
@@ -429,13 +429,13 @@ public:
 		if (log) time = log_runtime(time);
 		if (log) cout << "building rlzsa" << flush;
 
-		S.width(ceil(log2((bwt.size()+1))/8.0)*8);
-		PS.width(ceil(log2((bwt.size()+1))/8.0)*8);
+		S.width(ceil(log2((n))/8.0)*8);
+		PS.width(ceil(log2((n))/8.0)*8);
 
 		S.resize(1);
 		PS.resize(1);
 		PL.resize(1);
-		S[0] = SA[0];
+		S[0] = SA(0);
 		PS[0] = 0;
 		PL[0] = 0;
 		ulint z_l = 1;
@@ -447,7 +447,7 @@ public:
 			SA_d_val.resize(1);
 			
 			// rlz-encode SA^d
-			while (i < bwt.size()) {
+			while (i < n) {
 				ulint b = 0;
 				ulint e = FM_rrev.size()-1;
 				ulint b_last,e_last,pos_sa;
@@ -457,7 +457,7 @@ public:
 				while (true) {
 					b_last = b;
 					e_last = e;
-					SA_d_val[0] = alphabet_map_inv[SA_d_vec[i+l]];
+					SA_d_val[0] = alphabet_map_inv[SA_d[i+l]];
 
 					if (sdsl::backward_search(FM_rrev, b, e, SA_d_val.begin(), SA_d_val.end(), b, e) == 0) {
 						break;
@@ -465,7 +465,7 @@ public:
 
 					l++;
 
-					if (l == UINT16_MAX || i+l == bwt.size()) {
+					if (l == UINT16_MAX || i+l == n) {
 						b_last = b;
 						e_last = e;
 						break;
@@ -484,7 +484,7 @@ public:
 
 				if (l == 0) {
 					// literal phrase
-					S[z-1] = SA[i];
+					S[z-1] = SA(i);
 					i++;
 					z_l++;
 				} else {
@@ -493,12 +493,12 @@ public:
 					i += l;
 
 					// add a literal phrase after each copy-phrase
-					if (i < bwt.size()) {
+					if (i < n) {
 						z++;
 						PL.resize(z);
 						PL[z-1] = 0;
 						S.resize(z);
-						S[z-1] = SA[i];
+						S[z-1] = SA(i);
 
 						if (z % a == 1) {
 							PS.resize(PS.size()+1);
@@ -516,31 +516,30 @@ public:
 		}
 
 		if (log) time = log_runtime(time);
-	    sdsl::remove(cache_file_name(conf::KEY_SA, cc_sa));
 
 		if (log) {
 			std::cout << std::endl;
 			std::cout << "z: " << PL.size() << std::endl;
 			std::cout << "z_l/z: " << z_l/(double)PL.size() << std::endl;
-			std::cout << "z/r: " << PL.size()/(double)r << std::endl;
+			std::cout << "z/r: " << PL.size()/(double)std::max<ulint>(r,1) << std::endl;
 			std::cout << "peak memory usage: " << format_size(malloc_count_peak()) << std::endl;
 		}
 
 		/*
 		std::cout << "SA: ";
-		for (ulint i=0; i<bwt.size(); i++) {
-			std::cout << SA[i] << ", ";
+		for (ulint i=0; i<n; i++) {
+			std::cout << SA(i) << ", ";
 		}
 
 		std::cout << std::endl << "SA^d: ";
-		std::cout << SA[0] << ", ";
-		for (ulint i=1; i<bwt.size(); i++) {
-			std::cout << int64_t{alphabet_map_inv[SA_d_vec[i]]}-int64_t{bwt.size()} << ", ";
+		std::cout << SA(0) << ", ";
+		for (ulint i=1; i<n; i++) {
+			std::cout << sad_t{alphabet_map_inv[SA_d[i]]}-sad_t{n} << ", ";
 		}
 
 		std::cout << std::endl << "R: ";
 		for (ulint i=0; i<R.size(); i++) {
-			std::cout << int64_t{R[i]}-int64_t{bwt.size()} << ", ";
+			std::cout << sad_t{R[i]}-sad_t{n} << ", ";
 		}
 		
 		std::cout << std::endl << "PL: ";
@@ -694,14 +693,57 @@ public:
 
 	}
 
-	/*
-	 * iterator locate(string &P){
-	 *
-	 * 	return iterator to iterate over all occurrences without storing them
-	 * 	in memory
-	 *
-	 * }
-	 */
+	ulint access_SA(ulint i) {
+		ulint x_ps; // index in PS of the last phrase starting before or at position i
+		{
+			ulint b = 0;
+			ulint e = PS.size()-1;
+			ulint m;
+
+			while (b != e) {
+				m = b+(e-b)/2+1;
+
+				if (PS[m] <= i) {
+					b = m;
+				} else {
+					e = m-1;
+				}
+			}
+
+			x_ps = b;
+		}
+
+		ulint s_cp = PS[x_ps]; // starting position of the current phrase
+		ulint x_p = a * x_ps;
+		
+		// find the phrase containing i
+		while (s_cp + std::max<ulint>(1,PL[x_p]) <= i) {
+			s_cp += std::max<ulint>(1,PL[x_p]);
+			x_p++;
+		}
+
+		if (PL[x_p] == 0) {
+			// the x_p-th phrase is a literal phrase
+			return S[x_p];
+		} else {
+			// the x_p-th phrase is a copy phrase, hence the x_p-1-th phrase is a
+			// literal phrase, because there is a literal phrase before each copy-phrase;
+			// so store its SA-value in s and decode the x_p-th phrase up to position i
+
+			ulint j = s_cp;
+			ulint s = S[x_p-1];
+			ulint p_r = S[x_p]; // current position in R
+
+			while (j <= i) {
+				s += R[p_r];
+				s -= n;
+				p_r++;
+				j++;
+			}
+
+			return s;
+		}
+	}
 
 	/*
 	 * locate all occurrences of P and return them in an array
@@ -709,12 +751,9 @@ public:
 	 */
 	template<typename uint_t = ulint>
 	void locate_all(string& P, vector<uint_t>& OCC){
-
 		range_t res = count_and_get_occ(P);
-		
 		ulint l = res.first;
 		ulint r = res.second;
-
 		ulint n_occ = r>=l ? (r-l)+1 : 0;
 
 		ulint x_ps; // index in PS of the last phrase starting before or at position l		
@@ -758,12 +797,11 @@ public:
 
 			i = s_cp;
 			s = S[x_p-1];
-
 			ulint p_r = S[x_p]; // current position in R
 
 			while (i < l) {
 				s += R[p_r];
-				s -= bwt.size();
+				s -= n;
 				p_r++;
 				i++;
 			}
@@ -792,7 +830,7 @@ public:
 			// decode the copy phrase and stop as soon as i > r
 			do {
 				s += R[p_r];
-				s -= bwt.size();
+				s -= n;
 				OCC.emplace_back(s);
 				p_r++;
 				i++;
@@ -845,7 +883,7 @@ public:
 		ulint w_bytes = 0;
 
 		assert(F.size()>0);
-		assert(bwt.size()>0);
+		assert(n>0);
 
 		out.write((char*)&chars_remapped,1);
 
@@ -864,6 +902,9 @@ public:
 		w_bytes += PS.serialize(out);
 		w_bytes += PL.serialize(out);
 		w_bytes += S.serialize(out);
+
+		out.write((char*)&n, sizeof(ulint));
+		w_bytes += sizeof(ulint);
 
 		return w_bytes;
 
@@ -887,13 +928,14 @@ public:
 		in.read((char*)F.data(),256*sizeof(ulint));
 
 		bwt.load(in);
-
 		r = bwt.number_of_runs();
 
 		R.load(in);
 		PS.load(in);
 		PL.load(in);
 		S.load(in);
+
+		in.read((char*)&n, sizeof(ulint));
 
 	}
 
@@ -924,11 +966,11 @@ public:
 	}
 
 	ulint text_size(){
-		return bwt.size()-1;
+		return n-1;
 	}
 
 	ulint bwt_size(){
-		return bwt.size();
+		return n;
 	}
 
 	uchar get_terminator(){
@@ -1077,6 +1119,7 @@ private:
 	//L column of the BWT, run-length compressed
 	rle_string_t bwt;
 	ulint terminator_position = 0;
+	ulint n = 0;
 	ulint r = 0;//number of BWT runs
 
 	sdsl::int_vector<> R; // rlzsa reference

@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.6)
+set(CMAKE_CXX_STANDARD 20)
 
 # Set a default build type if none was specified
 if(NOT CMAKE_BUILD_TYPE)
@@ -30,8 +31,6 @@ target_include_directories(sdsl PUBLIC "${CMAKE_BINARY_DIR}/external/sdsl-lite/e
 
 message("Building in ${CMAKE_BUILD_TYPE} mode")
 
-set(CMAKE_CXX_FLAGS "--std=c++17")
-
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb -g")
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -fstrict-aliasing -DNDEBUG -march=native")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -ggdb -Ofast -fstrict-aliasing -march=native")
@@ -47,6 +46,10 @@ add_subdirectory("${CMAKE_SOURCE_DIR}/external/unordered_dense/")
 add_library(sais-lite-lcp INTERFACE)
 target_include_directories(sais-lite-lcp INTERFACE "${CMAKE_SOURCE_DIR}/external/sais-lite-lcp/")
 
+# libsais
+set(LIBSAIS_USE_OPENMP OFF CACHE BOOL "" FORCE)
+add_subdirectory("${CMAKE_SOURCE_DIR}/external/libsais/")
+
 include_directories("${CMAKE_SOURCE_DIR}/external/ips4o/include/")
 include_directories("${CMAKE_SOURCE_DIR}/external/unordered_dense/include/")
 include_directories("${CMAKE_SOURCE_DIR}/external/sais-lite-lcp/")
@@ -58,18 +61,21 @@ TARGET_LINK_LIBRARIES(ri-build divsufsort64)
 TARGET_LINK_LIBRARIES(ri-build ips4o)
 TARGET_LINK_LIBRARIES(ri-build unordered_dense)
 TARGET_LINK_LIBRARIES(ri-build sais-lite-lcp)
+TARGET_LINK_LIBRARIES(ri-build libsais)
 TARGET_LINK_LIBRARIES(ri-build malloc_count)
 
 add_executable(ri-locate ri-locate.cpp)
 TARGET_LINK_LIBRARIES(ri-locate sdsl)
 TARGET_LINK_LIBRARIES(ri-locate divsufsort)
 TARGET_LINK_LIBRARIES(ri-locate divsufsort64)
+TARGET_LINK_LIBRARIES(ri-locate libsais)
 TARGET_LINK_LIBRARIES(ri-locate malloc_count)
 
 add_executable(ri-count ri-count.cpp)
 TARGET_LINK_LIBRARIES(ri-count sdsl)
 TARGET_LINK_LIBRARIES(ri-count divsufsort)
 TARGET_LINK_LIBRARIES(ri-count divsufsort64)
+TARGET_LINK_LIBRARIES(ri-count libsais)
 TARGET_LINK_LIBRARIES(ri-count malloc_count)
 
 #add_executable(ri-space ri-space.cpp)
@@ -86,6 +92,7 @@ add_executable(test "${CMAKE_SOURCE_DIR}/tests/test.cpp")
 TARGET_LINK_LIBRARIES(test sdsl)
 TARGET_LINK_LIBRARIES(test divsufsort)
 TARGET_LINK_LIBRARIES(test divsufsort64)
+TARGET_LINK_LIBRARIES(test libsais)
 TARGET_LINK_LIBRARIES(test gtest_main)
 TARGET_LINK_LIBRARIES(test malloc_count)
 
