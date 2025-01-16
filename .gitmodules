@@ -15,4 +15,4 @@
 	url = git@github.com:ByteHamster-etc/malloc_count.git
 [submodule "external/libsais"]
 	path = external/libsais
-	url = https://github.com/IlyaGrebnov/libsais
+	url = git@github.com:IlyaGrebnov/libsais.git
