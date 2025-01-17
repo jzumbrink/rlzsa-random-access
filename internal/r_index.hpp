@@ -23,7 +23,6 @@
 #include <sdsl/csa_bitcompressed.hpp>
 #include <sdsl/suffix_array_algorithm.hpp>
 #include <ips4o.hpp>
-#include <sais.hxx>
 #include <ankerl/unordered_dense.h>
 #include <libsais.h>
 #include <libsais64.h>
@@ -210,28 +209,20 @@ public:
 			SA_d[i] = alphabet_map[SA_d[i]];
 		}
 
-
 		if (log) time = log_runtime(time);
 		if (log) cout << "building suffix array of SA^d" << flush;
 
+		sad_t fs = 6 * (sigma_sad + 1);
 		vector<sad_t> SA_sad;
-		SA_sad.resize(n);
+		SA_sad.resize(n + fs);
 
 		if constexpr (std::is_same_v<sad_t, int32_t>) {
-			sad_t fs = std::min<sad_t>(6 * (sigma_sad + 1), n);
-			SA_d.resize(n + 1 + fs);
-			SA_d[n] = 0;
 			libsais_int(SA_d.data(), SA_sad.data(), n, sigma_sad + 1, fs);
-			SA_d.resize(n);
 		} else {
-			//sad_t fs = std::min<sad_t>(6 * (sigma_sad + 1), n);
-			//SA_d.resize(n + 1 + fs);
-			//SA_d[n] = 0;
-			//libsais64_long(SA_d.data(), SA_sad.data(), n, sigma_sad + 1, fs); // unfortunately still bugged
-			saisxx(SA_d.begin(), SA_sad.begin(), sad_t{n}, sad_t{sigma_sad + 1});
-			//SA_d.resize(n);
+			libsais64_long(SA_d.data(), SA_sad.data(), n, sigma_sad + 1, fs);
 		}
-		
+
+		SA_sad.resize(n);
 		if (log) time = log_runtime(time);
 		if (log) cout << "building inverse suffix array of SA^d" << flush;
 
@@ -273,8 +264,8 @@ public:
 				while (equal && i+j < n) {
 					for (ulint l=0; l<k; l++) {
 						if (
-							SA_sad[i+j]+l > n ||
-							SA_sad[i+j-1]+l > n ||
+							SA_sad[i+j]+l == n ||
+							SA_sad[i+j-1]+l == n ||
 							SA_d[SA_sad[i+j]+l] != SA_d[SA_sad[i+j-1]+l]
 						) {
 							equal = false;

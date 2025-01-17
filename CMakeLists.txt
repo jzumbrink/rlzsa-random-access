@@ -21,19 +21,14 @@ target_include_directories(malloc_count INTERFACE "${CMAKE_SOURCE_DIR}/external/
 target_link_libraries(malloc_count INTERFACE dl)
 
 # sdsl
-set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
-add_subdirectory("${CMAKE_SOURCE_DIR}/external/sdsl-lite/")
-set_target_properties(
-  uninstall-sdsl uninstall divsufsort divsufsort64
-  PROPERTIES EXCLUDE_FROM_ALL 1 EXCLUDE_FROM_DEFAULT_BUILD 1
-)
-target_include_directories(sdsl PUBLIC "${CMAKE_BINARY_DIR}/external/sdsl-lite/external/libdivsufsort/include/")
+include_directories("~/include")
+link_directories("~/lib")
 
 message("Building in ${CMAKE_BUILD_TYPE} mode")
 
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb -g")
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -fstrict-aliasing -DNDEBUG -march=native")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -ggdb -Ofast -fstrict-aliasing -march=native")
+set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -ggdb -fstrict-aliasing -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -ggdb -Ofast -fstrict-aliasing")
 
 # ips4o
 add_subdirectory("${CMAKE_SOURCE_DIR}/external/ips4o")
@@ -42,17 +37,12 @@ set_target_properties(ips4o_example PROPERTIES EXCLUDE_FROM_ALL 1 EXCLUDE_FROM_D
 # unordered_dense
 add_subdirectory("${CMAKE_SOURCE_DIR}/external/unordered_dense/")
 
-# sais-lite-lcp
-add_library(sais-lite-lcp INTERFACE)
-target_include_directories(sais-lite-lcp INTERFACE "${CMAKE_SOURCE_DIR}/external/sais-lite-lcp/")
-
 # libsais
 set(LIBSAIS_USE_OPENMP OFF CACHE BOOL "" FORCE)
 add_subdirectory("${CMAKE_SOURCE_DIR}/external/libsais/")
 
 include_directories("${CMAKE_SOURCE_DIR}/external/ips4o/include/")
 include_directories("${CMAKE_SOURCE_DIR}/external/unordered_dense/include/")
-include_directories("${CMAKE_SOURCE_DIR}/external/sais-lite-lcp/")
 
 add_executable(ri-build ri-build.cpp)
 TARGET_LINK_LIBRARIES(ri-build sdsl)
@@ -60,7 +50,6 @@ TARGET_LINK_LIBRARIES(ri-build divsufsort)
 TARGET_LINK_LIBRARIES(ri-build divsufsort64)
 TARGET_LINK_LIBRARIES(ri-build ips4o)
 TARGET_LINK_LIBRARIES(ri-build unordered_dense)
-TARGET_LINK_LIBRARIES(ri-build sais-lite-lcp)
 TARGET_LINK_LIBRARIES(ri-build libsais)
 TARGET_LINK_LIBRARIES(ri-build malloc_count)
 
