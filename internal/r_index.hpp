@@ -143,7 +143,7 @@ public:
 	    sdsl::remove(cache_file_name(conf::KEY_SA, cc_sa));
 	}
 
-	protected:
+	public:
 	template <typename sad_t>
 	void build_rlzsa_internal(std::function<ulint(ulint)> SA, bool log = false) {
 		auto time = now();
@@ -166,7 +166,7 @@ public:
 	public:
 	template <typename sad_t = int32_t>
 	void build_rlzsa(vector<sad_t>& SA_d, std::function<ulint(ulint)> SA, ulint reference_size, bool log = true) {
-		/*std::cout << "SA:";
+		std::cout << "SA:";
 		for (int i = 0; i < 100; i++) {
 			std::cout << SA(i) << ", ";
 		}
@@ -175,7 +175,7 @@ public:
 		for (int i = 0; i < 100; i++) {
 			std::cout << SA_d[i] << ", ";
 		}
-		std::cout << std::endl;*/
+		std::cout << std::endl;
 
 		n = SA_d.size();
 		auto time = now();
@@ -1035,8 +1035,6 @@ public:
         std::cout << "PL: " << format_size(sdsl::size_in_bytes(PL)) << std::endl;
         std::cout << "S: " << format_size(sdsl::size_in_bytes(S)) << std::endl;
     }
-
-private:
 
 	/*
 	 * returns <l,r>, where l,r are the inclusive ranges of the pattern P. If P does not occur, then l>r

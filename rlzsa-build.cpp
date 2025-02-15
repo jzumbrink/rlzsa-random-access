@@ -10,6 +10,7 @@
 
 using namespace ri_rlzsa;
 using namespace std;
+using namespace sdsl;
 
 string out_basename=string();
 string input_file=string();
@@ -19,13 +20,11 @@ bool sais=true;
 ulint T = 0;//Build fast index with SA rate = T
 bool fast = false;//build fast index
 bool hyb = false; //use hybrid bitvectors instead of sd_vectors?
-ulint reference_size = 0;
 
 void help(){
 	cout << "rlzsa-build: builds the rlzsa-index. Extension .rlzsa is automatically added to output index file" << endl << endl;
-	cout << "Usage: rlzsa-build [options] <input_file_name> <reference size> <integer file>" << endl;
+	cout << "Usage: rlzsa-build [options] <input_file_name> <integer file>" << endl;
 	cout << "   <input_file_name>    input text file." << endl;
-	cout << "   <reference size>     the size of the reference string used for rlz (typically around 5*r)." << endl;
 	cout << "   <integer file>       path to file which contains an integer value at each line." << endl;
 	cout << "   -o <basename>        use 'basename' as prefix for all index files. Default: basename is the specified input_file_name"<<endl;
 	exit(0);
@@ -73,13 +72,12 @@ int main(int argc, char** argv){
     input_file=string();
 	int ptr = 1;
 
-	if(argc<4) help();
+	if(argc<3) help();
 
-	while(ptr<argc-3)
+	while(ptr<argc-2)
 		parse_args(argv, argc, ptr);
 
 	input_file = string(argv[ptr++]);
-	reference_size = std::stoll(argv[ptr++]);
 	integer_file = string(argv[ptr++]);
 
 	// load indices
@@ -123,7 +121,7 @@ int main(int argc, char** argv){
 	auto idx = r_index<>();
 
 	int64_t n = input.size();
-	auto sa = std::make_unique<int64_t[]>(n);
+	/*auto sa = std::make_unique<int64_t[]>(n);
 	libsais64((uint8_t const*) input.data(), sa.get(), n, 0, nullptr);
 
 	vector<int64_t> SA_d;
@@ -133,14 +131,28 @@ int main(int argc, char** argv){
 		SA_d.push_back(sa[i] + n + 1 - sa[i - 1]);
 	}
 	std::cout << "SA_d size=" << SA_d.size() << std::endl;
-	std::cout << "using rlz reference_size" << reference_size << std::endl;
+	std::cout << "using rlz reference_size " << reference_size << std::endl;
 
 	//std::function<uint64_t(uint64_t)> SA_function = [std::move(sa)](uint64_t i) { return sa[i]; };
-	auto SA_function = [&](uint64_t i){return sa[i];};
+	auto SA_function = [&](uint64_t i){return sa[i];};*/
 
-	idx.build_rlzsa<int64_t>(SA_d, SA_function, reference_size);
+	auto bwt_and_sa = idx.sufsort(input);
+	idx.n = input.size() + 1;
+	
 
-	idx.serialize(out);
+	string& bwt_s = get<0>(bwt_and_sa);
+	int_vector_buffer<>& SA = *get<1>(bwt_and_sa);
+	cache_config cc_sa = get<2>(bwt_and_sa);
+	auto bwt = rle_string_sd(bwt_s);
+	idx.r = bwt.number_of_runs();
+
+	if (n + 1 <= std::numeric_limits<int32_t>::max()) {
+		idx.build_rlzsa_internal<int32_t>([&](ulint i){return SA[i];}, true);
+	} else {
+		idx.build_rlzsa_internal<int64_t>([&](ulint i){return SA[i];}, true);
+	}
+
+	idx.serialize(out, false);
 
 
 	auto t2 = high_resolution_clock::now();
