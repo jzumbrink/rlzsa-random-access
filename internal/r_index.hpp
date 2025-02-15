@@ -47,7 +47,7 @@ public:
 	/*
 	 * Build index
 	 */
-	r_index(string &input, bool sais = true, bool log = false){
+	r_index(string &input, bool sais = true, bool log = true){
 		auto time = now();
 
 		this->sais = sais;
@@ -159,12 +159,24 @@ public:
 		}
 		
 		if (log) time = log_runtime(time);
-		build_rlzsa<sad_t>(SA_d, SA, log);
+		ulint size_R_target = std::min(std::max<ulint>(1,n/3),5*r);
+		build_rlzsa<sad_t>(SA_d, SA, size_R_target, log);
 	}
 
 	public:
 	template <typename sad_t = int32_t>
-	void build_rlzsa(vector<sad_t>& SA_d, std::function<ulint(ulint)> SA, bool log = false) {
+	void build_rlzsa(vector<sad_t>& SA_d, std::function<ulint(ulint)> SA, ulint reference_size, bool log = true) {
+		/*std::cout << "SA:";
+		for (int i = 0; i < 100; i++) {
+			std::cout << SA(i) << ", ";
+		}
+		std::cout << std::endl;
+		std::cout << "SA^d:";
+		for (int i = 0; i < 100; i++) {
+			std::cout << SA_d[i] << ", ";
+		}
+		std::cout << std::endl;*/
+
 		n = SA_d.size();
 		auto time = now();
 		if (log) cout << "sorting SA^d" << flush;
@@ -237,7 +249,10 @@ public:
 		if (log) time = log_runtime(time);
 		if (log) cout << "counting frequencies of k-mers in SA^d" << flush;
 
-		ulint size_R_target = std::min(std::max<ulint>(1,n/3),5*r); // 3'000'000/(SA_d.width()/8)
+		ulint size_R_target = reference_size;
+		
+		std::cout << "size_R_target=" << size_R_target << std::endl;
+
 		ulint segment_size = std::min<ulint>(4096,size_R_target);
 		ulint num_segments = n/segment_size;
 		vector<ulint> selected_segments;
@@ -516,6 +531,7 @@ public:
 			std::cout << "peak memory usage: " << format_size(malloc_count_peak()) << std::endl;
 		}
 
+		std::cout << "Build RLZSA finished" << std::endl;
 		/*
 		std::cout << "SA: ";
 		for (ulint i=0; i<n; i++) {
@@ -869,7 +885,7 @@ public:
 	/* serialize the structure to the ostream
 	 * \param out	 the ostream
 	 */
-	ulint serialize(std::ostream& out){
+	ulint serialize(std::ostream& out, bool ser_bwt = true){
 
 		ulint w_bytes = 0;
 
@@ -882,20 +898,31 @@ public:
 			out.write((char*)&M_Sigma[0],256);
 		}
 
-		out.write((char*)&terminator_position,sizeof(terminator_position));
-		out.write((char*)F.data(),256*sizeof(ulint));
+		if (r > 0 && ser_bwt) {
+			std::cout << "Write bwt to disk" << std::endl;
+			out.write((char*)&terminator_position,sizeof(terminator_position));
+			out.write((char*)F.data(),256*sizeof(ulint));
 
-		w_bytes += sizeof(terminator_position) + 256*sizeof(ulint);
+			w_bytes += sizeof(terminator_position) + 256*sizeof(ulint);
 
-		w_bytes += bwt.serialize(out);
+			w_bytes += bwt.serialize(out);
+		}
+
+		std::cout << "1: w_bytes=" << w_bytes << std::endl;
 
 		w_bytes += R.serialize(out);
+		std::cout << "2: w_bytes=" << w_bytes << std::endl;
 		w_bytes += PS.serialize(out);
+		std::cout << "3: w_bytes=" << w_bytes << std::endl;
 		w_bytes += PL.serialize(out);
+		std::cout << "4: w_bytes=" << w_bytes << std::endl;
 		w_bytes += S.serialize(out);
+		std::cout << "5: w_bytes=" << w_bytes << std::endl;
 
 		out.write((char*)&n, sizeof(ulint));
 		w_bytes += sizeof(ulint);
+
+		std::cout << "Wrote " << w_bytes << " to disk." << std::endl;
 
 		return w_bytes;
 
@@ -904,7 +931,7 @@ public:
 	/* load the structure from the istream
 	 * \param in the istream
 	 */
-	void load(std::istream& in) {
+	void load(std::istream& in, bool load_bwt = true) {
 
 		in.read((char*)&chars_remapped,1);
 
@@ -913,17 +940,23 @@ public:
 			in.read((char*)&M_Sigma[0],256);
 		}
 
-		in.read((char*)&terminator_position,sizeof(terminator_position));
+		if (load_bwt) {
+			in.read((char*)&terminator_position,sizeof(terminator_position));
 
-		F = vector<ulint>(256);
-		in.read((char*)F.data(),256*sizeof(ulint));
+			F = vector<ulint>(256);
+			in.read((char*)F.data(),256*sizeof(ulint));
 
-		bwt.load(in);
-		r = bwt.number_of_runs();
+			bwt.load(in);
+			r = bwt.number_of_runs();
+		}
 
+		std::cout << "Load 1" << std::endl;
 		R.load(in);
+		std::cout << "Load 2" << std::endl;
 		PS.load(in);
+		std::cout << "Load 3" << std::endl;
 		PL.load(in);
+		std::cout << "Load 4" << std::endl;
 		S.load(in);
 
 		in.read((char*)&n, sizeof(ulint));
