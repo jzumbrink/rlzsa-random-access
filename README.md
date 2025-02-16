@@ -1,6 +1,8 @@
-r-index: the run-length BWT index
+rlzsa-random-access
 ===============
-Author: Nicola Prezza (nicola.prezza@gmail.com)
+A modification of the r-index and the r-index-rlzsa.
+
+R-Index Author: Nicola Prezza (nicola.prezza@gmail.com)
 Joint work with Travis Gagie and Gonzalo Navarro
 
 rlzsa has been added according to [1] and [2]
@@ -14,21 +16,12 @@ Travis Gagie, Gonzalo Navarro, and Nicola Prezza. Fully Functional Suffix Trees 
 
 ### Brief description
 
-The r-index is the first full-text index of size O(r+z'), r being the number of BWT runs of the input text (of size n) and z' is the number of phrases in the relative lempel-ziv encoded differential suffix array (see [1]).
-
-Let s be the alphabet size and fix a constant eps>0. The r-index offers the following tradeoffs:
-
-- Space: r * ( log s + (1+eps)log(n/r) + 2log n ) + O(r log n) + O(z' log n) bits
-- Count time: O( (m/eps) * (log (n/r) + log s) )
-- Locate time: After count, O( 1 ) time per occurrence, but O( r ) time overall (worst-case)
-
-On very repetitive datasets, the r-index locates orders of magnitude faster than the RLCSA (with a sampling rate resulting in the same size for the two indexes).
-
+RLZ-compressed sufffix array. Only offers support for random access.
 ### Download
 
 To clone the repository, run:
 
-> git clone https://github.com/LukasNalbach/r-index-rlzsa
+> git clone https://github.com/jzumbrink/rlzsa-random-access
 
 ### Compile
 
@@ -48,23 +41,15 @@ and compile:
 
 After compiling, run 
 
->  ri-build input
+>  rlzsa-build input
 
-This command will create the r-index of the text file "input" and will store it as "input.ri". Use option -o to specify a different basename for the index file. 
-
-Run
-
-> ri-count index.ri patterns
-
-to count number of occurrences of the patterns, where <patterns> is a file containing the patterns in pizza&chili format (http://pizzachili.dcc.uchile.cl/experiments.html). To generate pattern files, use the tool http://pizzachili.dcc.uchile.cl/utils/genpatterns.c. Note: the Pizza&chili format consists of a header followed by newline followed by all the patterns concatenated (without any separator). The patterns must all be of the same length.
+This command will create the rlz compressed suffix array of the text file "input" and will store it as "input.rlzsa". Use option -o to specify a different basename for the index file. 
 
 Run
 
-> ri-locate index.ri patterns
+> rlzsa-ra index.rlzsa indices
 
-to locate all occurrences of the patterns.
-
-Be aware that the above executables are just benchmarking tools: no output is generated (pattern occurrences are deleted after being extracted and not printed to output).
+to perform random access with indices specified in indices.
 
 ### Funding
 
