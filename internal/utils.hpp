@@ -10,7 +10,7 @@
 
 using namespace std;
 
-namespace ri_rlzsa{
+namespace rlz{
 
 using ulint = uint64_t;
 

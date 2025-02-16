@@ -33,7 +33,7 @@
 
 using namespace std;
 
-namespace ri_rlzsa{
+namespace rlz{
 
 typedef uint64_t ulint;
 typedef long int lint;

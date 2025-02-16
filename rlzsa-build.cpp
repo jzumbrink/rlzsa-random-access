@@ -4,11 +4,10 @@
 
 #include <iostream>
 
-#include "internal/r_index.hpp"
+#include "internal/rlzsa.hpp"
 #include "utils.hpp"
-#include "internal/r_index.hpp"
 
-using namespace ri_rlzsa;
+using namespace rlz;
 using namespace std;
 using namespace sdsl;
 
@@ -18,14 +17,11 @@ string integer_file=string();
 int sa_rate = 512;
 bool sais=true;
 ulint T = 0;//Build fast index with SA rate = T
-bool fast = false;//build fast index
-bool hyb = false; //use hybrid bitvectors instead of sd_vectors?
 
 void help(){
 	cout << "rlzsa-build: builds the rlzsa-index. Extension .rlzsa is automatically added to output index file" << endl << endl;
-	cout << "Usage: rlzsa-build [options] <input_file_name> <integer file>" << endl;
+	cout << "Usage: rlzsa-build [options] <input_file_name>" << endl;
 	cout << "   <input_file_name>    input text file." << endl;
-	cout << "   <integer file>       path to file which contains an integer value at each line." << endl;
 	cout << "   -o <basename>        use 'basename' as prefix for all index files. Default: basename is the specified input_file_name"<<endl;
 	exit(0);
 }
@@ -72,22 +68,12 @@ int main(int argc, char** argv){
     input_file=string();
 	int ptr = 1;
 
-	if(argc<3) help();
+	if(argc<2) help();
 
-	while(ptr<argc-2)
+	while(ptr<argc-1)
 		parse_args(argv, argc, ptr);
 
 	input_file = string(argv[ptr++]);
-	integer_file = string(argv[ptr++]);
-
-	// load indices
-	cout << "Loading indices" << endl;
-	std::ifstream arbitrary_indices_in(integer_file);
-	string last_index = string();
-	vector<int64_t> arbitrary_indices;
-	while(arbitrary_indices_in >> last_index) {
-		arbitrary_indices.push_back(std::stoll(last_index));
-	}
 
 	if(out_basename.compare("")==0)
 		out_basename = string(input_file);
@@ -114,45 +100,9 @@ int main(int argc, char** argv){
 	string path = string(out_basename).append(".rlzsa");
 	std::ofstream out(path);
 
-	//save flag storing whether index is fast or small
-	out.write((char*)&fast,sizeof(fast));
+	auto idx = rlzsa<>(input);
 
-
-	auto idx = r_index<>();
-
-	int64_t n = input.size();
-	/*auto sa = std::make_unique<int64_t[]>(n);
-	libsais64((uint8_t const*) input.data(), sa.get(), n, 0, nullptr);
-
-	vector<int64_t> SA_d;
-	SA_d.reserve(n);
-	if (n > 0) SA_d.push_back(sa[0]);
-	for (int i = 1; i < n; ++i) {
-		SA_d.push_back(sa[i] + n + 1 - sa[i - 1]);
-	}
-	std::cout << "SA_d size=" << SA_d.size() << std::endl;
-	std::cout << "using rlz reference_size " << reference_size << std::endl;
-
-	//std::function<uint64_t(uint64_t)> SA_function = [std::move(sa)](uint64_t i) { return sa[i]; };
-	auto SA_function = [&](uint64_t i){return sa[i];};*/
-
-	auto bwt_and_sa = idx.sufsort(input);
-	idx.n = input.size() + 1;
-	
-
-	string& bwt_s = get<0>(bwt_and_sa);
-	int_vector_buffer<>& SA = *get<1>(bwt_and_sa);
-	cache_config cc_sa = get<2>(bwt_and_sa);
-	auto bwt = rle_string_sd(bwt_s);
-	idx.r = bwt.number_of_runs();
-
-	if (n + 1 <= std::numeric_limits<int32_t>::max()) {
-		idx.build_rlzsa_internal<int32_t>([&](ulint i){return SA[i];}, true);
-	} else {
-		idx.build_rlzsa_internal<int64_t>([&](ulint i){return SA[i];}, true);
-	}
-
-	idx.serialize(out, false);
+	idx.serialize(out);
 
 
 	auto t2 = high_resolution_clock::now();
@@ -162,15 +112,13 @@ int main(int argc, char** argv){
 
 	out.close();
 
-	auto ra_start = high_resolution_clock::now();
-	// measure random access time
-	int64_t a = 0;
-	for (int64_t i = 0; i < arbitrary_indices.size(); i++) {
-		a += idx.access_SA(arbitrary_indices[i]);
-	}
-	auto ra_end = high_resolution_clock::now();
-	cout << a << endl;
+	idx.log_data_structure_sizes();
 
-	cout << "Managed " << arbitrary_indices.size() << " random accesses in " << duration_cast<chrono::milliseconds>(ra_end - ra_start).count() << " ms" << endl;
-
+	ulint time_ms = duration_cast<chrono::milliseconds>(t2 - t1).count();
+	cout << "RESULT"
+		<< " algo=rlzsa_build"
+		<< " time_ms=" << time_ms
+		<< " n=" << idx.n
+		<< " idx_size=" << idx.size_in_bytes()
+		<< endl;
 }

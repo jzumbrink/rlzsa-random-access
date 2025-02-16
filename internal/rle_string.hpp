@@ -28,9 +28,8 @@
 #include "definitions.hpp"
 #include "huff_string.hpp"
 #include "sparse_sd_vector.hpp"
-#include "sparse_hyb_vector.hpp"
 
-namespace ri_rlzsa{
+namespace rlz{
 
 template<
 	class sparse_bitvector_t = sparse_sd_vector, 	//predecessor structure storing run length
@@ -586,6 +585,5 @@ private:
 };
 
 typedef rle_string<sparse_sd_vector> rle_string_sd;
-typedef rle_string<sparse_hyb_vector> rle_string_hyb;
 
 }

@@ -3,7 +3,7 @@
 // by a MIT license that can be found in the LICENSE file.
 
 /*
- * r_index.hpp
+ * rlzsa.hpp
  *
  *  Created on: Apr 13, 2017
  *      Author: nico
@@ -16,8 +16,6 @@
 
 #include "definitions.hpp"
 #include "rle_string.hpp"
-#include "sparse_sd_vector.hpp"
-#include "sparse_hyb_vector.hpp"
 #include "utils.hpp"
 #include <sdsl/csa_wt.hpp>
 #include <sdsl/csa_bitcompressed.hpp>
@@ -29,65 +27,29 @@
 
 using namespace sdsl;
 
-namespace ri_rlzsa{
+namespace rlz{
 
-template	<	class sparse_bv_type = sparse_sd_vector,
-				class rle_string_t = rle_string_sd
-			>
-class r_index{
+template<class rle_string_t = rle_string_sd>
+class rlzsa{
 
 public:
 
 	using triple = std::tuple<range_t, ulint, ulint>;
 
-	r_index(){}
+	rlzsa(){}
 
 	static constexpr ulint a = 64;
 
 	/*
 	 * Build index
 	 */
-	r_index(string &input, bool sais = true, bool log = true){
+	rlzsa(string &input, bool log = true) {
 		auto time = now();
-
-		this->sais = sais;
-		
-		std::vector<uint8_t> occurs(256,0);
-		uint8_t sigma = 0;
-
-		for (uint64_t i=0; i<input.size(); i++) {
-			if (occurs[char_to_uchar(input[i])] == 0) {
-				occurs[char_to_uchar(input[i])] = 1;
-				sigma++;
-			}
-		}
-
-		if (occurs[0] || occurs[1]) {
-			chars_remapped = true;
-
-			M_Sigma.resize(256,0);
-			uint8_t cur_char = 2;
-
-			for (uint64_t i=0; i<256; i++) {
-				if (occurs[i]) {
-					M_Sigma[i] = cur_char;
-					cur_char++;
-				}
-			}
-
-			for (uint64_t i=0; i<input.size(); i++) {
-				input[i] = uchar_to_char(M_Sigma[char_to_uchar(input[i])]);
-			}
-		}
 
 		n = input.size() + 1;
 		if (log) cout << "n = " << n << endl;
 
-		if (log) cout << "building BWT and computing SA samples";
-		if(log && sais) cout << " (SE-SAIS)" << flush;
-		else if (log) cout << " (DIVSUFSORT)" << flush;
-
-		//build run-length encoded BWT
+		if (log) cout << "building BWT and computing SA samples (SE-SAIS)";
 
 		auto bwt_and_sa = sufsort(input);
 
@@ -95,43 +57,14 @@ public:
 		int_vector_buffer<>& SA = *get<1>(bwt_and_sa);
 		cache_config cc_sa = get<2>(bwt_and_sa);
 
-		if (log) time = log_runtime(time);
-
-		if (log) cout << "RLE encoding BWT" << flush;
-
-		bwt = rle_string_t(bwt_s);
-
-		//build F column
-		F = vector<ulint>(256,0);
-		for(uchar c : bwt_s)
-			F[c]++;
-
-		for(ulint i=255;i>0;--i)
-			F[i] = F[i-1];
-
-		F[0] = 0;
-
-		for(ulint i=1;i<256;++i)
-			F[i] += F[i-1];
-
-		for(ulint i=0;i<bwt_s.size();++i)
-			if(bwt_s[i]==TERMINATOR)
-				terminator_position = i;
-
-		assert(input.size()+1 == n);
-		
-		if (log) time = log_runtime(time);
-
+		auto bwt = rle_string_sd(bwt_s);
 		r = bwt.number_of_runs();
 
 		int log_r = bitsize(uint64_t(r));
 		int log_n = bitsize(uint64_t(n));
 
 		if (log) {
-			cout << "Number of BWT equal-letter runs: r = " << r << endl;
-			cout << "Rate n/r = " << double(n)/r << endl;
-			cout << "log2(r) = " << log2(double(r)) << endl;
-			cout << "log2(n/r) = " << log2(double(n)/r) << endl;
+			cout << "Number of BWT equal-letter runs (used for determination of reference size): r = " << r << endl;
 		}
 
 		if (n + 1 <= std::numeric_limits<int32_t>::max()) {
@@ -166,7 +99,7 @@ public:
 	public:
 	template <typename sad_t = int32_t>
 	void build_rlzsa(vector<sad_t>& SA_d, std::function<ulint(ulint)> SA, ulint reference_size, bool log = true) {
-		std::cout << "SA:";
+		/*std::cout << "SA:";
 		for (int i = 0; i < 100; i++) {
 			std::cout << SA(i) << ", ";
 		}
@@ -175,7 +108,7 @@ public:
 		for (int i = 0; i < 100; i++) {
 			std::cout << SA_d[i] << ", ";
 		}
-		std::cout << std::endl;
+		std::cout << std::endl;*/
 
 		n = SA_d.size();
 		auto time = now();
@@ -568,138 +501,6 @@ public:
 
 	}
 
-	/*
-	 * get full BWT range
-	 */
-	range_t full_range(){
-
-		//inclusive range
-		return {0,bwt_size()-1};
-
-	}
-
-	uchar operator[](ulint i ){
-		return bwt[i];
-	}
-
-	/*
-	 * \param r inclusive range of a string w
-	 * \param c character
-	 * \return inclusive range of cw
-	 */
-	range_t LF(range_t rn, uchar c){
-
-		//if character does not appear in the text, return empty pair
-		if((c==255 and F[c]==bwt_size()) || F[c]>=F[c+1])
-			return {1,0};
-
-		//number of c before the interval
-		ulint c_before = bwt.rank(rn.first,c);
-
-		//number of c inside the interval rn
-		ulint c_inside = bwt.rank(rn.second+1,c) - c_before;
-
-		//if there are no c in the interval, return empty range
-		if(c_inside==0) return {1,0};
-
-		ulint l = F[c] + c_before;
-
-		return {l,l+c_inside-1};
-
-	}
-
-	//backward navigation of the BWT
-	ulint LF(ulint  i){
-
-		auto c = bwt[i];
-		return F[c] + bwt.rank(i,c);
-
-	}
-
-	//forward navigation of the BWT
-	ulint FL(ulint  i){
-
-		//i-th character in first BWT column
-		auto c = F_at(i);
-
-		//this c is the j-th (counting from 0)
-		ulint j = i - F[c];
-
-		return bwt.select(j,uchar(c));
-
-	}
-
-	//forward navigation of the BWT, where for efficiency we give c=F[i] as input
-	ulint FL(ulint  i, uchar c){
-
-		//i-th character in first BWT column
-		assert(c == F_at(i));
-
-		//this c is the j-th (counting from 0)
-		ulint j = i - F[c];
-
-		return bwt.select(j,uchar(c));
-
-	}
-
-	/*
-	 * access column F at position i
-	 */
-	uchar F_at(ulint i){
-
-		ulint c = (upper_bound(F.begin(),F.end(),i) - F.begin()) - 1;
-		assert(c<256);
-		assert(i>=F[c]);
-
-		return uchar(c);
-
-	}
-
-	/*
-	 * Return BWT range of character c
-	 */
-	range_t get_char_range(uchar c){
-
-		//if character does not appear in the text, return empty pair
-		if((c==255 and F[c]==bwt_size()) || F[c]>=F[c+1])
-			return {1,0};
-
-		ulint l = F[c];
-		ulint r = bwt_size()-1;
-
-		if(c<255)
-			r = F[c+1]-1;
-
-		return {l,r};
-
-	}
-
-	/*
-	 * Return BWT range of pattern P
-	 */
-	range_t count(string &P){
-
-		auto range = full_range();
-		ulint m = P.size();
-
-		for(ulint i=0;i<m and range.second>=range.first;++i)
-			range = LF(range,chars_remapped ? M_Sigma[char_to_uchar(P[m-i-1])] : char_to_uchar(P[m-i-1]));
-
-		return range;
-
-	}
-
-	/*
-	 * Return number of occurrences of P in the text
-	 */
-	ulint occ(string &P){
-
-		auto rn = count(P);
-
-		return rn.second>=rn.first ? (rn.second-rn.first)+1 : 0;
-
-	}
-
 	ulint access_SA(ulint i) {
 		ulint x_ps; // index in PS of the last phrase starting before or at position i
 		{
@@ -752,172 +553,16 @@ public:
 		}
 	}
 
-	/*
-	 * locate all occurrences of P and return them in an array
-	 * (space consuming if result is big).
-	 */
-	template<typename uint_t = ulint>
-	void locate_all(string& P, vector<uint_t>& OCC){
-		range_t res = count_and_get_occ(P);
-		ulint l = res.first;
-		ulint r = res.second;
-		ulint n_occ = r>=l ? (r-l)+1 : 0;
-
-		ulint x_ps; // index in PS of the last phrase starting before or at position l		
-		{
-			ulint b = 0;
-			ulint e = PS.size()-1;
-			ulint m;
-
-			while (b != e) {
-				m = b+(e-b)/2+1;
-
-				if (PS[m] <= l) {
-					b = m;
-				} else {
-					e = m-1;
-				}
-			}
-
-			x_ps = b;
-		}
-
-		ulint s_cp = PS[x_ps]; // starting position of the current phrase
-		ulint x_p = a * x_ps;
-		
-		// find the phrase containing l
-		while (s_cp + std::max<ulint>(1,PL[x_p]) <= l) {
-			s_cp += std::max<ulint>(1,PL[x_p]);
-			x_p++;
-		}
-
-		ulint i; // current position in the suffix array
-		ulint s; // current suffix
-
-		if (PL[x_p] == 0) {
-			// the x_p-th phrase is a literal phrase
-			i = l;
-		} else {
-			// the x_p-th phrase is a copy phrase, hence the x_p-1-th phrase is a
-			// literal phrase, because there is a literal phrase before each copy-phrase;
-			// so store its SA-value in s and decode the x_p-th phrase up to position l
-
-			i = s_cp;
-			s = S[x_p-1];
-			ulint p_r = S[x_p]; // current position in R
-
-			while (i < l) {
-				s += R[p_r];
-				s -= n;
-				p_r++;
-				i++;
-			}
-		}
-
-		OCC.reserve(n_occ);
-		ulint s_np = s_cp + std::max<ulint>(1,PL[x_p]); // starting position of the next phrase
-	
-		while (true) {
-			// decode all literal phrases until the next copy phrase or until i > r
-			while (PL[x_p] == 0 && i <= r) {
-				s = S[x_p];
-				OCC.emplace_back(s);
-				x_p++;
-				s_cp++;
-				s_np += std::max<ulint>(1,PL[x_p]);
-				i++;
-			}
-
-			if (i > r) {
-				break;
-			}
-
-			ulint p_r = S[x_p] + (i - s_cp); // current position in R
-
-			// decode the copy phrase and stop as soon as i > r
-			do {
-				s += R[p_r];
-				s -= n;
-				OCC.emplace_back(s);
-				p_r++;
-				i++;
-			} while (i < s_np && i <= r);
-
-			if (i > r) {
-				break;
-			}
-
-			x_p++;
-			s_cp = s_np;
-			s_np += std::max<ulint>(1,PL[x_p]);
-		}
-	}
-
-	template<typename uint_t = ulint>
-	vector<uint_t> locate_all(string& P){
-		vector<uint_t> OCC;
-		locate_all<uint_t>(P,OCC);
-		return OCC;
-	}
-
-
-	/*
-	 * get number of runs in the BWT (terminator character included)
-	 */
-	ulint number_of_runs(){
-		return bwt.number_of_runs();
-	}
-
-	/*
-	 * get terminator (0x1) position in the BWT
-	 */
-	ulint get_terminator_position(){
-		return terminator_position;
-	}
-
-	/*
-	 * get BWT in string format
-	 */
-	string get_bwt(){
-		return bwt.toString();
-	}
-
 	/* serialize the structure to the ostream
 	 * \param out	 the ostream
 	 */
-	ulint serialize(std::ostream& out, bool ser_bwt = true){
-
+	ulint serialize(std::ostream& out){
 		ulint w_bytes = 0;
 
-		assert(F.size()>0);
-		assert(n>0);
-
-		out.write((char*)&chars_remapped,1);
-
-		if (chars_remapped) {
-			out.write((char*)&M_Sigma[0],256);
-		}
-
-		if (r > 0 && ser_bwt) {
-			std::cout << "Write bwt to disk" << std::endl;
-			out.write((char*)&terminator_position,sizeof(terminator_position));
-			out.write((char*)F.data(),256*sizeof(ulint));
-
-			w_bytes += sizeof(terminator_position) + 256*sizeof(ulint);
-
-			w_bytes += bwt.serialize(out);
-		}
-
-		std::cout << "1: w_bytes=" << w_bytes << std::endl;
-
 		w_bytes += R.serialize(out);
-		std::cout << "2: w_bytes=" << w_bytes << std::endl;
 		w_bytes += PS.serialize(out);
-		std::cout << "3: w_bytes=" << w_bytes << std::endl;
 		w_bytes += PL.serialize(out);
-		std::cout << "4: w_bytes=" << w_bytes << std::endl;
 		w_bytes += S.serialize(out);
-		std::cout << "5: w_bytes=" << w_bytes << std::endl;
 
 		out.write((char*)&n, sizeof(ulint));
 		w_bytes += sizeof(ulint);
@@ -925,42 +570,18 @@ public:
 		std::cout << "Wrote " << w_bytes << " to disk." << std::endl;
 
 		return w_bytes;
-
 	}
 
 	/* load the structure from the istream
 	 * \param in the istream
 	 */
-	void load(std::istream& in, bool load_bwt = true) {
-
-		in.read((char*)&chars_remapped,1);
-
-		if (chars_remapped) {
-			M_Sigma.resize(256);
-			in.read((char*)&M_Sigma[0],256);
-		}
-
-		if (load_bwt) {
-			in.read((char*)&terminator_position,sizeof(terminator_position));
-
-			F = vector<ulint>(256);
-			in.read((char*)F.data(),256*sizeof(ulint));
-
-			bwt.load(in);
-			r = bwt.number_of_runs();
-		}
-
-		std::cout << "Load 1" << std::endl;
+	void load(std::istream& in) {
 		R.load(in);
-		std::cout << "Load 2" << std::endl;
 		PS.load(in);
-		std::cout << "Load 3" << std::endl;
 		PL.load(in);
-		std::cout << "Load 4" << std::endl;
 		S.load(in);
 
 		in.read((char*)&n, sizeof(ulint));
-
 	}
 
 	/*
@@ -968,13 +589,11 @@ public:
 	 * \param path_prefix prefix of the index files. suffix ".ri" will be automatically added
 	 */
 	void save_to_file(string path_prefix){
-
-		string path = string(path_prefix).append(".ri");
+		string path = string(path_prefix).append(".rlzsa");
 
 		std::ofstream out(path);
 		serialize(out);
 		out.close();
-
 	}
 
 	/*
@@ -982,42 +601,14 @@ public:
 	 * \param path: full file name
 	 */
 	void load_from_file(string path){
-
 		std::ifstream in(path);
 		load(in);
 		in.close();
-
-	}
-
-	ulint text_size(){
-		return n-1;
-	}
-
-	ulint bwt_size(){
-		return n;
-	}
-
-	uchar get_terminator(){
-		return TERMINATOR;
-	}
-
-	ulint print_space(){
-
-		cout << "Number of runs = " << bwt.number_of_runs() << endl<<endl;
-
-		ulint tot_bytes = bwt.print_space();
-
-		cout << "\nTOT BWT space: " << tot_bytes << " Bytes" <<endl<<endl;
-
-		return tot_bytes;
-
 	}
 	
     uint64_t size_in_bytes() {
         uint64_t size = 0;
 
-		size += 256*sizeof(ulint);
-		size += bwt.size_in_bytes();
 		size += sdsl::size_in_bytes(R);
 		size += sdsl::size_in_bytes(PS);
 		size += sdsl::size_in_bytes(PL);
@@ -1029,40 +620,11 @@ public:
     void log_data_structure_sizes() {
         std::cout << "index size: " << format_size(size_in_bytes()) << std::endl;
 
-        std::cout << "bwt: " << format_size(bwt.size_in_bytes()) << std::endl;
         std::cout << "R: " << format_size(sdsl::size_in_bytes(R)) << std::endl;
         std::cout << "PS: " << format_size(sdsl::size_in_bytes(PS)) << std::endl;
         std::cout << "PL: " << format_size(sdsl::size_in_bytes(PL)) << std::endl;
         std::cout << "S: " << format_size(sdsl::size_in_bytes(S)) << std::endl;
     }
-
-	/*
-	 * returns <l,r>, where l,r are the inclusive ranges of the pattern P. If P does not occur, then l>r
-	 *
-	 * returns range
-	 *
-	 */
-	range_t count_and_get_occ(string &P){
-
-		range_t range = full_range();
-
-		range_t range1;
-
-		ulint m = P.size();
-
-		for(ulint i=0;i<m and range.second>=range.first;++i){
-
-			uchar c = chars_remapped ? M_Sigma[char_to_uchar(P[m-i-1])] : char_to_uchar(P[m-i-1]);
-
-			range1 = LF(range,c);
-
-			range = range1;
-
-		}
-
-		return range;
-
-	}
 
 	/*
 	 * returns a triple containing BWT of input string
@@ -1088,7 +650,7 @@ public:
 
 	    store_to_cache(text, conf::KEY_TEXT, cc);
 
-	    construct_config::byte_algo_sa = sais ? SE_SAIS : LIBDIVSUFSORT;
+	    construct_config::byte_algo_sa = SE_SAIS;
 	    construct_sa<8>(cc);
 
 	    //now build BWT from SA
@@ -1116,31 +678,8 @@ public:
 
 	}
 
-	static bool contains_reserved_chars(string &s){
-
-		for(auto c : s)
-			if(c == 0 or c == 1)
-				return true;
-
-		return false;
-
-	}
-
 	static const uchar TERMINATOR = 1;
 
-	bool sais = true;
-
-	bool chars_remapped = false;
-
-	/*
-	 * sparse RLBWT: r (log sigma + (1+epsilon) * log (n/r)) (1+o(1)) bits
-	 */
-
-	//F column of the BWT (vector of 256 elements)
-	vector<ulint> F;
-	//L column of the BWT, run-length compressed
-	rle_string_t bwt;
-	ulint terminator_position = 0;
 	ulint n = 0;
 	ulint r = 0;//number of BWT runs
 
@@ -1148,7 +687,6 @@ public:
 	sdsl::int_vector<> PS; // rlzsa phrase starting positions (every a-th phrase is sampled)
 	sdsl::int_vector<16> PL; // rlzsa phrase lengths
 	sdsl::int_vector<> S; // starting positions of the rlzsa phrases in R
-	std::vector<uint8_t> M_Sigma;
 };
 
 }

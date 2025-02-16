@@ -24,7 +24,7 @@ typedef uint64_t ulint;
 typedef uint32_t uint;
 #endif
 
-namespace ri_rlzsa{
+namespace rlz{
 
 class sparse_sd_vector{
 
